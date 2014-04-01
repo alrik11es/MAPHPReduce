@@ -3,28 +3,26 @@
 namespace MAPHPReduce;
 
 use MAPHPReduce\Storage\MAPHPReduceStorage;
+use MAPHPReduce\Exception\ForkingErrorException;
 
 class MAPHPReduce 
 {
 
-  private $storeSystem = null;
+  /**
+   * @var MAPHPReduceStorage
+   */
+  private $storageSystem = null;
 
-  private $tasks = array();
   private $reducedTasks = array();
   private $numWorkers = 0;
+  private $lock = '/tmp/foo';
 
   // @Closure $map fn
   private $mapFn;
   private $numberOfTasks;
 
-  public function setStoreSystem(MAPHPReduceStorage $storeSystem) 
+  public function __construct($numTasks = 4) 
   {
-    $this->storeSystem = $storeSystem;
-  }
-
-  public function __construct(array $tasks = array(), $numTasks = 4) 
-  {
-    $this->tasks = $tasks;
     $this->numberOfTasks = is_numeric($numTasks) ? $numTasks : 4;
   }
 
@@ -39,9 +37,13 @@ class MAPHPReduce
 
   public function reduce(\Closure $reduce) 
   {
-    if ($this->numWorkers == $this->numberOfTasks) {
-      call_user_func($reduce, $this->storeSystem->getReducedTasks());
-    }
+
+    $this->waitForMyChildren();
+
+    call_user_func(
+      $reduce, 
+      $this->storageSystem->getReducedTasks()
+    );
 
   }
 
@@ -49,63 +51,67 @@ class MAPHPReduce
   {
 
     $pidChild = pcntl_fork();
-                                                                    
+    $this->numWorkers++;
+                                                                
     switch ($pidChild) {
       case -1:
-        throw new Exception("Error Forking process", 1);
+        throw new ForkingErrorException("Error Forking process", 1);
         break;
 
       case 0: // Child's time
+          
+          while(is_file($this->lock)) {
+            clearstatcache();
+            usleep(150 * $this->numWorkers);
+          }
 
-          $myTask = $this->giveMeMyTask($this->numWorkers);          
-          $this->numWorkers++;
+          touch($this->lock);
 
-            /*
-          $this->reducedTasks = array_merge(
-            $this->reducedTasks,
-            
-            $this->getReducedTask(call_user_func(
-              $this->mapFn,
-              $myTask,
-              $this->storeSystem
-              )
-            )
-          );*/
+          $key = $this->numWorkers - 1;
+          $myTask = $this->storageSystem->giveMeMyTask($key);          
 
-          call_user_func( $this->mapFn, $myTask, $this->storeSystem);
+          $reducedTask = call_user_func($this->mapFn, $myTask);
 
-          if ($this->numWorkers < $this->numberOfTasks) {
-            $this->splitTasks();
-          }  
+          $this->storageSystem->store(
+            $key,
+            $reducedTask              
+          );            
+
+          unlink($this->lock);
+
+          $this->imDoneHere($this->numWorkers); 
           
         break;
 
-      default:
-          
-          if (pcntl_waitpid($pidChild, $status) > 0 ) {
-              //$this->children--;
-          }
+      default: // i'm still the father
+        
+        if ($this->numWorkers < $this->numberOfTasks) {
+          $this->splitTasks();
+        } 
+        
     }
   }
 
-  private function giveMeMyTask($numWorker) 
+  public function setStoreSystem(MAPHPReduceStorage $storeSystem) 
   {
-    $taskLength = count($this->tasks) / $this->numberOfTasks;
-    $offset = $numWorker * $taskLength;
-    
-    return array_slice($this->tasks, $offset, $taskLength); 
+    $this->storageSystem = $storeSystem;
+  }
+
+  private function waitForMyChildren() 
+  {
+    while (pcntl_waitpid(0, $status) != -1) {
+      $status = pcntl_wexitstatus($status);
+      echo "Child $status completed\n";
+    }
   }
 
   /**
-   * @array $tasks
-   * @return MAPHPReduce
-   */
-  public function setTasks(array $tasks, $numTasks = 4)
+   *
+   **/
+  private function imDoneHere($key = 'some key') 
   {
-    $this->tasks = $tasks;
-    $this->numberOfTasks = is_numeric($numTasks) ? $numTasks : 4;
-
-    return $this;
+    usleep(5);
+    exit($key);
   }
 
 }

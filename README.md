@@ -9,23 +9,38 @@ A PHP implementation of [Map Reduce framework](http://en.wikipedia.org/wiki/MapR
 
 ```php
 <?php
-require 'vendor/autoload.php';
-
+/**
+ * Example : 
+ * Summation of a list of numbers
+ */
 use MAPHPReduce\MAPHPReduce;
+use MAPHPReduce\Storage\ArrayStorage;
 
-$mpr = new MAPHPReduce();
-$myTasks = array(1,2,3,4,5,6);
+$myTasks = array(
+  '0'=>array(1,2),
+  '1'=>array(3,4),
+  '2'=>array(5,6)
+);
 
-$mpr->setTasks($myTasks);
+// a way to keep our data
+$storageSystem = new ArrayStorage($myTasks);
 
-// We like closures, don't we ?
+$numberOfSubTasks = 3;
+
+$mpr = new MAPHPReduce($numberOfSubTasks);
+$mpr->setStoreSystem($storageSystem);
+
+// My job here is [1,2] , [3,4] , [5,6]
 $mpr->map(function($myJob) {
-  return doMyjob($myJob); // set a reduced task
+  var_dump($myJob);
+  return array(
+    array_sum($myJob)
+  );
 });
 
-// So we have now all the reduced tasks in $allMyTasks
 $mpr->reduce(function($allmytasks) {
-  reduceIt($allmytasks);
+  var_dump($allmytasks);
+  var_dump(array_sum($allmytasks));
 });
 ```
 
@@ -33,6 +48,12 @@ $mpr->reduce(function($allmytasks) {
 
 Sometimes we have to work with a huge amount of data. 
 [Lately](http://en.wikipedia.org/wiki/Big_data), more and more, and it's just no possible to work sequentially these times. 
+
+For example, we have two cooks in a kitchen and a very big carrot.
+Well, we want our two workers not to be waiting for each other. 
+So why we don't split the carrot in two parts so they can work each one with a part ?
+
+This way both cooks can work together, at the same time, and we will have our dinner soon ! Great huh ?
 
 So, the intention is to make an agile and encapsulated way to split a task in several child subtasks in parallel.
 
