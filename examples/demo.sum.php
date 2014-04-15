@@ -6,7 +6,7 @@
  * Usage : php demo.sum.php 
  * Storage: Memcache
  **************************************************/
-require 'vendor/autoload.php';
+require '../vendor/autoload.php';
 
 use MAPHPReduce\MAPHPReduce;
 use MAPHPReduce\Storage\MemcacheStorage;

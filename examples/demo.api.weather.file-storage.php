@@ -4,7 +4,7 @@
  * Usage  : php examples/demo.api.weather.php 
  * Storage: File
  **************************************************/
-require 'vendor/autoload.php';
+require '../vendor/autoload.php';
 
 use MAPHPReduce\MAPHPReduce;
 use MAPHPReduce\Storage\FileStorage;
